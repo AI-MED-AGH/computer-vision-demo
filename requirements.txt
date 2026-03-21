@@ -1,0 +1,10 @@
+numpy
+opencv-python
+pykinect2
+vrcap
+drake
+pyyaml
+scipy
+pyserial
+matplotlib
+filterpy
