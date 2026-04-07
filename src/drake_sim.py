@@ -24,7 +24,18 @@ class DrakeArmController:
         pass
 
     def update_visualization(self, q):
-        pass
+        q = np.asarray(q, dtype=float).reshape(-1)
+
+        if q.shape[0] != self.num_positions:
+            raise ValueError(f"Expected q of length {self.num_positions}, got {q.shape[0]}")
+
+        self.plant.SetPositions(self.plant_context, q)
+        self.diagram.ForcedPublish(self.context)
 
     def get_joint_angles_deg(self, q):
-        pass
+        q = np.asarray(q, dtype=float).reshape(-1)
+
+        if q.shape[0] != self.num_positions:
+            raise ValueError(f"Expected q of length {self.num_positions}, got {q.shape[0]}")
+
+        return np.degrees(q)
