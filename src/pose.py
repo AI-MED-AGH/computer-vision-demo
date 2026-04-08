@@ -4,8 +4,8 @@ from math import sqrt
 #import testing   
 
 MAX_MISSING_FRAMES = 5
-ALPHA = 0.25
-MAX_JUMP = 20
+ALPHA = 0.05
+MAX_JUMP = 15
 
 class HandPoseFilter:
 
@@ -39,7 +39,7 @@ class HandPoseFilter:
         self.max_jump = max_jump
        
 
-    def update(self, point: np.array) -> Union[np.ndarray, None]:
+    def update(self, point: np.array) -> np.ndarray:
 
         '''
         based on EMA filter
@@ -49,7 +49,7 @@ class HandPoseFilter:
         
         if point is None or np.isnan(point).any():
             self.missing_count +=1
-            return None
+            return self.filtered
         
         if len(point) != 3:
             raise ValueError("Point must be a 3D coordinate (x, y, z)")
@@ -59,7 +59,7 @@ class HandPoseFilter:
 
         elif self._is_outlier(point):
             self.missing_count += 1
-            return None
+            return self.filtered
         
         else:
             ema = self.alpha * point + (1 - self.alpha) * self.filtered
