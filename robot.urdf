@@ -7,9 +7,9 @@
       <geometry>
         <mesh filename="meshes/base_link.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
-      </material>
+      <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 0.13" rpy="0 0 0" />
@@ -56,8 +56,8 @@
       <geometry>
         <mesh filename="meshes/Link_1.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
@@ -93,9 +93,9 @@
       <geometry>
         <mesh filename="meshes/Link_2.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
-      </material>
+      <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 -0.08" rpy="0 0 0" />
@@ -130,8 +130,8 @@
       <geometry>
         <mesh filename="meshes/Link_3.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
@@ -167,9 +167,9 @@
       <geometry>
         <mesh filename="meshes/Link_4.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.29412 0.29412 0.29412 1" />
-      </material>
+      <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 0.01" rpy="0 0 0" />
@@ -204,8 +204,8 @@
       <geometry>
         <mesh filename="meshes/Link_5.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.79216 0.81961 0.93333 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
@@ -241,9 +241,9 @@
       <geometry>
         <mesh filename="meshes/Gripper_Servo_Gear.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.9098 0.44314 0.031373 1" />
-      </material>
+     <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -278,8 +278,8 @@
       <geometry>
         <mesh filename="meshes/Tip_Gripper_Servo.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.6 1 0.27843 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
@@ -316,9 +316,9 @@
       <geometry>
         <mesh filename="meshes/Gripper_Idol_Gear.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.058824 0.64706 1 1" />
-      </material>
+      <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -353,8 +353,8 @@
       <geometry>
         <mesh filename="meshes/Tip_Gripper_Idol.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.79216 0.81961 0.93333 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
@@ -391,9 +391,9 @@
       <geometry>
         <mesh filename="meshes/Pivot_Arm_Gripper_Servo.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.79216 0.81961 0.93333 1" />
-      </material>
+      <material name="black_override">
+  <color rgba="0.25 0.25 0.25 1"/>
+</material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -429,8 +429,8 @@
       <geometry>
         <mesh filename="meshes/Pivot_Arm_Gripper_Idol.obj" />
       </geometry>
-      <material name="">
-        <color rgba="0.79216 0.81961 0.93333 1" />
+      <material name="orange">
+        <color rgba="1 0.5 0 1" />
       </material>
     </visual>
     <collision>
