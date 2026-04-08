@@ -41,7 +41,7 @@ class HandPoseFilter:
 
     def update(self, point: np.array) -> np.ndarray:
 
-        '''
+        ''' 
         based on EMA filter
         returns np.array object if point exists and point is not an outlier
         returns None in other cases
@@ -89,7 +89,7 @@ class HandPoseFilter:
         y1, y2 = (point[1], self.filtered[1])
         z1, z2 = (point[2], self.filtered[2])
 
-        euclidean_distance_3d = sqrt( (x1 - x2)**2 + (y1 - y2) **2 + (z1 - z2)**2)
+        euclidean_distance_3d = sqrt((x1 - x2)**2 + (y1 - y2) **2 + (z1 - z2)**2)
 
         if euclidean_distance_3d > self.max_jump:
             return True                                # is outlier
