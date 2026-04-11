@@ -7,7 +7,7 @@ from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.analysis import Simulator
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, CoulombFriction
 from pydrake.multibody.parsing import Parser
-from pydrake.geometry import MeshcatVisualizer, StartMeshcat, Box
+from pydrake.geometry import MeshcatVisualizer, StartMeshcat, Box, Mesh
 
 
 class DrakeArmController:
@@ -36,7 +36,7 @@ class DrakeArmController:
         )
 
         self._add_environment()
-
+        self.plant.mutable_gravity_field().set_gravity_vector([0.0, 0.0, 0.0])
         self.plant.Finalize()
 
         self.meshcat = None
@@ -50,7 +50,27 @@ class DrakeArmController:
 
         self.ee_frame = self.plant.GetFrameByName(end_effector_frame_name, self.robot_model_instance)
         self.num_positions = self.plant.num_positions(self.robot_model_instance)
+        self.gripper_joint_name = "Gripper_Servo_Gear_Joint"
+        self.gripper_joint = self.plant.GetJointByName(
+            self.gripper_joint_name,
+            self.robot_model_instance
+        )
+        self.gripper_index = self.gripper_joint.position_start()
+
+        self.gripper_open_angle = 0.05
+        self.gripper_closed_angle = 0.65
         self.q_home = np.zeros(self.num_positions)
+        self.q_nominal = np.zeros(self.num_positions)
+
+        # Delikatnie lepsza pozycja startowa dla ramienia.
+        if self.num_positions > 1:
+            self.q_nominal[1] = -0.35
+        if self.num_positions > 2:
+            self.q_nominal[2] = 0.75
+        if self.num_positions > 3:
+            self.q_nominal[3] = -0.55
+        if self.num_positions > 4:
+            self.q_nominal[4] = 0.10
 
         self.simulator = Simulator(self.diagram, self.context)
         self.simulator.set_target_realtime_rate(1.0)
@@ -59,44 +79,52 @@ class DrakeArmController:
         self.reset_robot_home()
         self.diagram.ForcedPublish(self.context)
 
+        try:
+            X_WE = self.get_end_effector_pose()
+            print("EE home position:", np.round(X_WE.translation(), 3))
+        except Exception as e:
+            print("Could not print EE home pose:", e)
+
+    def set_gripper_closed(self, q, closed: bool):
+        q = np.asarray(q, dtype=float).copy().reshape(-1)
+
+        if q.shape[0] != self.num_positions:
+            raise ValueError(f"Expected q of length {self.num_positions}, got {q.shape[0]}")
+
+        q[self.gripper_index] = self.gripper_closed_angle if closed else self.gripper_open_angle
+        return q
+
+    def hand_state_to_gripper_closed(self, hand_state: int, hand_confidence: int = None) -> bool:
+        # 2=open, 3=closed
+        # confidence: 0=low, 1=high
+        if hand_confidence is not None and hand_confidence == 0:
+            return False
+
+        if hand_state == 3:
+            return True
+        if hand_state == 2:
+            return False
+
+        return False
+
     def solve_ik(self, target_position, target_rotation=None):
-        """
-        #1 -> Creating an IK problem for our virtual robot we pass on the robot model (plant) and its current state (context)
-        #2 -> Getting the (q) whose values the solver should find for us
-        #3 -> identifies the zero point of the entire virtual world in the simulation and the moving center point of the robot's gripper.
-               It then imposes a stringent condition on the equation system, forcing the gripper to be positioned exactly at your target point
-               by setting its minimum and maximum allowable positions to exactly the same value.
-        #4 -> We check whether the user has provided any target rotation at all, and if so, we impose another constraint on the solver.
-               We limit the allowable angular error (theta_bound) to zero, meaning the gripper must position itself EXACTLY
-               at the specified angle in the world frame.
-        #5 -> First, we extract an array of the robot's current joint angles from the virtual model. We then pass this array to the math
-               program (ik.prog()), forcing the solver to start its calculations from this safe location.
-        #6 -> We invoke the main optimization engine of the Drake environment, dropping in our prepared mathematical program.
-               The engine performs the heavy calculations underneath, and the entire summary of this operation
-               (whether it was successful and what the resulting numbers were) is packed into the result variable.
-        #7 -> We check the calculator's internal success flag to ensure it has found a physically possible solution.
-        """
         target_position = np.asarray(target_position, dtype=float).reshape(3)
 
-        # 1
         ik = InverseKinematics(self.plant, self.plant_context)
-
-        # 2
         q = ik.q()
 
-        # 3
         world_frame = self.plant.world_frame()
-        ee_frame = self.plant.GetFrameByName(self.end_effector_frame_name, self.robot_model_instance)
+        ee_frame = self.ee_frame
 
+        eps = 0.03
         ik.AddPositionConstraint(
             frameB=ee_frame,
             p_BQ=[0, 0, 0],
             frameA=world_frame,
-            p_AQ_lower=target_position,
-            p_AQ_upper=target_position
+            p_AQ_lower=target_position - eps,
+            p_AQ_upper=target_position + eps
         )
 
-        # 4
         if target_rotation is not None:
             if isinstance(target_rotation, RotationMatrix):
                 R_target = target_rotation
@@ -108,21 +136,39 @@ class DrakeArmController:
                 R_AbarA=R_target,
                 frameBbar=ee_frame,
                 R_BbarB=RotationMatrix(),
-                theta_bound=0.0
+                theta_bound=0.15
             )
 
-        # 5
         current_q = self.plant.GetPositions(self.plant_context, self.robot_model_instance)
-        ik.prog().SetInitialGuess(q, current_q)
 
-        # 6
-        result = Solve(ik.prog())
+        # Koszt: nie odchodź za daleko od sensownej pozycji nominalnej.
+        ik.prog().AddQuadraticErrorCost(
+            np.eye(self.num_positions) * 1.0,
+            self.q_nominal,
+            q
+        )
 
-        # 7
-        if result.is_success():
-            return result.GetSolution(q)
-        else:
-            return None
+        # Koszt: nie skacz zbyt mocno względem aktualnej pozycji.
+        ik.prog().AddQuadraticErrorCost(
+            np.eye(self.num_positions) * 0.25,
+            current_q,
+            q
+        )
+
+        guesses = [
+            current_q,
+            self.q_nominal,
+            0.5 * current_q + 0.5 * self.q_nominal,
+            self.q_home,
+        ]
+
+        for guess in guesses:
+            ik.prog().SetInitialGuess(q, guess)
+            result = Solve(ik.prog())
+            if result.is_success():
+                return result.GetSolution(q)
+
+        return None
 
     def _add_environment(self):
         room_x = 2.5
@@ -134,14 +180,13 @@ class DrakeArmController:
         ceiling_z = room_h + wall_t / 2.0
         wall_z = room_h / 2.0
 
-        # ===== PODŁOGA: checkerboard =====
         tile_h = 0.02
         tile_size = 0.25
         nx = int(room_x / tile_size)
         ny = int(room_y / tile_size)
 
-        color_a = np.array([0.18, 0.18, 0.18, 1.0], dtype=float)
-        color_b = np.array([0.28, 0.28, 0.28, 1.0], dtype=float)
+        color_a = np.array([1.0, 1.0, 1.0, 1.0], dtype=float)
+        color_b = np.array([0.90, 0.84, 0.25, 1.0], dtype=float)
 
         start_x = -room_x / 2.0 + tile_size / 2.0
         start_y = -room_y / 2.0 + tile_size / 2.0
@@ -160,7 +205,6 @@ class DrakeArmController:
                     color
                 )
 
-        # kolizja podłogi jako jedna bryła
         floor_collision_shape = Box(room_x, room_y, wall_t)
         self.plant.RegisterCollisionGeometry(
             self.plant.world_body(),
@@ -170,7 +214,6 @@ class DrakeArmController:
             CoulombFriction(0.9, 0.8)
         )
 
-        # ===== SUFIT =====
         ceiling_color = np.array([0.92, 0.92, 0.9, 1.0], dtype=float)
         ceiling_shape = Box(room_x, room_y, wall_t)
         self.plant.RegisterVisualGeometry(
@@ -181,15 +224,13 @@ class DrakeArmController:
             ceiling_color
         )
 
-        # ===== ŚCIANY: panele drewniane =====
         wood_colors = [
-            np.array([0.55, 0.35, 0.20, 1.0], dtype=float),
-            np.array([0.60, 0.40, 0.22, 1.0], dtype=float),
-            np.array([0.50, 0.32, 0.18, 1.0], dtype=float),
-            np.array([0.62, 0.42, 0.24, 1.0], dtype=float),
+            np.array([1.0, 1.0, 1.0, 1.0], dtype=float),
+            np.array([0.98, 0.98, 0.98, 1.0], dtype=float),
+            np.array([0.96, 0.96, 0.96, 1.0], dtype=float),
+            np.array([0.99, 0.99, 0.99, 1.0], dtype=float),
         ]
 
-        # lewa ściana - pionowe panele
         panel_w_y = 0.22
         n_left = int(room_y / panel_w_y) + 1
         start_y_left = -room_y / 2.0 + panel_w_y / 2.0
@@ -204,7 +245,6 @@ class DrakeArmController:
                 wood_colors[i % len(wood_colors)]
             )
 
-        # prawa ściana - pionowe panele
         n_right = int(room_y / panel_w_y) + 1
         start_y_right = -room_y / 2.0 + panel_w_y / 2.0
 
@@ -218,7 +258,6 @@ class DrakeArmController:
                 wood_colors[i % len(wood_colors)]
             )
 
-        # tylna ściana - pionowe panele
         panel_w_x = 0.22
         n_back = int(room_x / panel_w_x) + 1
         start_x_back = -room_x / 2.0 + panel_w_x / 2.0
@@ -233,7 +272,6 @@ class DrakeArmController:
                 wood_colors[i % len(wood_colors)]
             )
 
-        # przednia ściana - pionowe panele
         n_front = int(room_x / panel_w_x) + 1
         start_x_front = -room_x / 2.0 + panel_w_x / 2.0
 
@@ -246,6 +284,89 @@ class DrakeArmController:
                 f"wall_front_panel_{i}",
                 wood_colors[i % len(wood_colors)]
             )
+        # ===== OKNA WEWNĘTRZNE =====
+
+        window_w = 0.75
+        window_h = 0.55
+        frame_t = 0.04
+        glass_t = 0.01
+
+        z_center = 0.95  # niżej niż wcześniej
+        y_wall_inner = (room_y / 2.0) - wall_t / 2.0 - 0.01  # od wewnątrz ściany
+
+        frame_color = np.array([1.0, 1.0, 1.0, 1.0], dtype=float)
+        glass_color = np.array([0.35, 0.65, 1.0, 1.0], dtype=float)
+
+        # dwa okna na jednej ścianie
+        for i, x in enumerate([-0.45, 0.45]):
+            # ===== ZEWNĘTRZNA RAMA =====
+
+            # góra
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x, y_wall_inner, z_center + window_h / 2]),
+                Box(window_w, frame_t, frame_t),
+                f"window_top_{i}",
+                frame_color
+            )
+
+            # dół
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x, y_wall_inner, z_center - window_h / 2]),
+                Box(window_w, frame_t, frame_t),
+                f"window_bottom_{i}",
+                frame_color
+            )
+
+            # lewa
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x - window_w / 2, y_wall_inner, z_center]),
+                Box(frame_t, frame_t, window_h),
+                f"window_left_{i}",
+                frame_color
+            )
+
+            # prawa
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x + window_w / 2, y_wall_inner, z_center]),
+                Box(frame_t, frame_t, window_h),
+                f"window_right_{i}",
+                frame_color
+            )
+
+            # ===== SZYBA / TŁO =====
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x, y_wall_inner + 0.002, z_center]),
+                Box(window_w - frame_t, glass_t, window_h - frame_t),
+                f"window_glass_{i}",
+                glass_color
+            )
+
+            # ===== KRZYŻ NA ŚRODKU (PLUS) =====
+
+            # pionowy podział
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x, y_wall_inner + 0.004, z_center]),
+                Box(frame_t, glass_t, window_h - frame_t),
+                f"window_cross_vertical_{i}",
+                frame_color
+            )
+
+            # poziomy podział
+            self.plant.RegisterVisualGeometry(
+                self.plant.world_body(),
+                RigidTransform([x, y_wall_inner + 0.004, z_center]),
+                Box(window_w - frame_t, glass_t, frame_t),
+                f"window_cross_horizontal_{i}",
+                frame_color
+            )
+        decor_color = np.array([1.0, 1.0, 1.0, 1.0], dtype=float)
+
 
     def update_visualization(self, q):
         q = np.asarray(q, dtype=float).reshape(-1)
@@ -274,7 +395,7 @@ class DrakeArmController:
         self.simulator.AdvanceTo(current_time + dt)
 
     def reset_robot_home(self):
-        self.plant.SetPositions(self.plant_context, self.robot_model_instance, self.q_home)
+        self.plant.SetPositions(self.plant_context, self.robot_model_instance, self.q_nominal)
         self.plant.SetVelocities(
             self.plant_context,
             self.robot_model_instance,

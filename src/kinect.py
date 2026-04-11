@@ -1,126 +1,94 @@
-import time
-import math
+import json
+import socket
+from typing import Optional
+
 import numpy as np
-import cv2
-import mediapipe as mp
+
 
 class KinectHandTracker:
-    def __init__(self, use_mock: bool = True):
-        self.use_mock = use_mock
-        self.sim_t = 0.0
-        self.device_handle = None
-        self._is_running = False
-        self._last_time = time.time()
+    def __init__(
+        self,
+        udp_ip: str = "0.0.0.0",
+        udp_port: int = 5005,
+        timeout_s: float = 0.2,
+        hand_key: str = "hand_right",
+    ):
+        self.udp_ip = udp_ip
+        self.udp_port = udp_port
+        self.timeout_s = timeout_s
+        self.hand_key = hand_key
 
-        if not self.use_mock:
-            self.mp_hands = mp.solutions.hands
-            self.hands_detector = self.mp_hands.Hands(
-                static_image_mode=False,
-                max_num_hands=1,
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5
-            )
-            self.fx = 500.0
-            self.fy = 500.0
-            self.cx = 320.0
-            self.cy = 240.0
+        self.sock = None
+        self._is_running = False
+
+        self.last_position: Optional[np.ndarray] = None
+        self.last_hand_state: Optional[int] = None
+        self.last_hand_confidence: Optional[int] = None
 
     def start(self) -> None:
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.udp_ip, self.udp_port))
+        self.sock.settimeout(self.timeout_s)
         self._is_running = True
-        self._last_time = time.time()
-        if not self.use_mock:
-            self.device_handle = cv2.VideoCapture(cv2.CAP_OPENNI2)
+        print(f"Kinect receiver listening on {self.udp_ip}:{self.udp_port}")
 
     def stop(self) -> None:
         self._is_running = False
-        if not self.use_mock:
-            if self.device_handle is not None:
-                self.device_handle.release()
-                self.device_handle = None
-            if hasattr(self, 'hands_detector'):
-                self.hands_detector.close()
+        if self.sock is not None:
+            self.sock.close()
+            self.sock = None
 
-    def get_hand_position_3d(self):
-        if not self._is_running:
+    def get_hand_measurement(self) -> Optional[dict]:
+        if not self._is_running or self.sock is None:
             return None
 
-        if self.use_mock:
-            current_time = time.time()
-            dt = current_time - self._last_time
-            self._last_time = current_time
-            self.sim_t += dt
+        try:
+            packet, _ = self.sock.recvfrom(4096)
+            decoded = packet.decode("utf-8").strip()
+            data = json.loads(decoded)
 
-            x = 0.3 * math.sin(self.sim_t * 1.2)
-            y = 0.2 * math.cos(self.sim_t * 0.8)
-            z = 1.0 + 0.15 * math.sin(self.sim_t * 0.5)
-
-            return np.array([x, y, z], dtype=float)
-
-        else:
-            try:
-                color_frame = self._get_color_frame()
-                depth_frame = self._get_depth_frame()
-
-                if color_frame is None or depth_frame is None:
-                    return None
-
-                hand_2d = self._detect_hand_2d(color_frame)
-                if hand_2d is None:
-                    return None
-
-                u, v = hand_2d
-                
-                if v >= depth_frame.shape[0] or u >= depth_frame.shape[1]:
-                    return None
-
-                depth_mm = depth_frame[v, u] 
-
-                if depth_mm <= 0:
-                    return None
-
-                depth_meters = float(depth_mm) / 1000.0
-
-                return self._project_to_3d(u, v, depth_meters)
-
-            except Exception:
+            tracked = data.get("tracked", True)
+            if not tracked:
                 return None
 
-    def _get_color_frame(self):
-        if self.device_handle and self.device_handle.isOpened():
-            self.device_handle.grab()
-            ret, frame = self.device_handle.retrieve(cv2.CAP_OPENNI_BGR_IMAGE)
-            if ret:
-                return frame
-        return None
+            hand = data.get(self.hand_key)
+            if hand is None:
+                return None
 
-    def _get_depth_frame(self):
-        if self.device_handle and self.device_handle.isOpened():
-            ret, depth_map = self.device_handle.retrieve(cv2.CAP_OPENNI_DEPTH_MAP)
-            if ret:
-                return depth_map
-        return None
+            point = np.asarray(hand, dtype=float).reshape(3)
+            if not np.isfinite(point).all():
+                return None
 
-    def _detect_hand_2d(self, color_frame):
-        rgb_frame = cv2.cvtColor(color_frame, cv2.COLOR_BGR2RGB)
-        rgb_frame.flags.writeable = False
-        
-        results = self.hands_detector.process(rgb_frame)
-        
-        if results.multi_hand_landmarks:
-            hand_landmarks = results.multi_hand_landmarks[0]
-            landmark = hand_landmarks.landmark[self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
-            
-            h, w, _ = color_frame.shape
-            u = int(landmark.x * w)
-            v = int(landmark.y * h)
-            
-            return (u, v)
-            
-        return None
+            hand_state = data.get("hand_state", None)
+            hand_confidence = data.get("hand_confidence", None)
 
-    def _project_to_3d(self, u: int, v: int, depth_value: float):
-        z = depth_value
-        x = (u - self.cx) * z / self.fx
-        y = (v - self.cy) * z / self.fy
-        
-        return np.array([x, y, z], dtype=float)
+            self.last_position = point
+            self.last_hand_state = hand_state
+            self.last_hand_confidence = hand_confidence
+
+            return {
+                "position": point,
+                "hand_state": hand_state,
+                "hand_confidence": hand_confidence,
+            }
+
+        except socket.timeout:
+            return None
+
+        except json.JSONDecodeError as e:
+            print("receiver json error:", e)
+            try:
+                print("bad packet:", packet.decode("utf-8", errors="ignore"))
+            except Exception:
+                pass
+            return None
+
+        except Exception as e:
+            print("receiver error:", e)
+            return None
+
+    def get_hand_position_3d(self) -> Optional[np.ndarray]:
+        measurement = self.get_hand_measurement()
+        if measurement is None:
+            return None
+        return measurement["position"]
