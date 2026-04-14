@@ -258,7 +258,7 @@
     <parent link="Link_5" />
     <child link="Gripper_Servo_Gear" />
     <axis xyz="0 1 0" />
-    <limit lower="0" upper="0.75" effort="5" velocity="1" />
+    <limit lower="0" upper="0.85" effort="5" velocity="1" />
   </joint>
 
   <link name="Tip_Gripper_Servo">
@@ -291,12 +291,12 @@
   </link>
 
   <joint name="Tip_Gripper_Servo_Joint" type="revolute">
-    <origin xyz="-0.039906 -0.004 -0.0027473" rpy="-3.1416 -1.5569 -2.0392E-12" />
-    <parent link="Gripper_Servo_Gear" />
+    <origin xyz="-0.047278677 0.00029943856 -0.019899708" rpy="-3.1415187 -1.4881423 -6.4581482E-05" />
+    <parent link="Pivot_Arm_Gripper_Servo" />
     <child link="Tip_Gripper_Servo" />
     <axis xyz="0 1 0" />
-    <limit lower="0" upper="0.75" effort="5" velocity="1" />
-    <mimic joint="Gripper_Servo_Gear_Joint" multiplier="1" offset="0" />
+    <limit lower="0" upper="0.85" effort="5" velocity="1" />
+    <mimic joint="Pivot_Arm_Gripper_Servo_Joint" multiplier="1" offset="0" />
   </joint>
 
   <link name="Gripper_Idol_Gear">
@@ -333,7 +333,7 @@
     <parent link="Link_5" />
     <child link="Gripper_Idol_Gear" />
     <axis xyz="0 1 0" />
-    <limit lower="-0.75" upper="0" effort="5" velocity="1" />
+    <limit lower="-0.85" upper="0" effort="5" velocity="1" />
     <mimic joint="Gripper_Servo_Gear_Joint" multiplier="-1" offset="0" />
   </joint>
 
@@ -367,12 +367,12 @@
   </link>
 
   <joint name="Tip_Gripper_Idol_Joint" type="revolute">
-    <origin xyz="-0.039906 -0.000125 -0.0027473" rpy="3.1416 0.5236 3.1416" />
-    <parent link="Gripper_Idol_Gear" />
+    <origin xyz="0.047000399 -0.0002497656 -0.020000514" rpy="-1.4354494E-05 -0.45484816 1.5077933E-05" />
+    <parent link="Pivot_Arm_Gripper_Idol" />
     <child link="Tip_Gripper_Idol" />
     <axis xyz="0 1 0" />
-    <limit lower="-0.75" upper="0" effort="5" velocity="1" />
-    <mimic joint="Gripper_Idol_Gear_Joint" multiplier="1" offset="0" />
+    <limit lower="0" upper="0.85" effort="5" velocity="1" />
+    <mimic joint="Pivot_Arm_Gripper_Idol_Joint" multiplier="-1" offset="0" />
   </joint>
 
   <link name="Pivot_Arm_Gripper_Servo">
@@ -430,8 +430,8 @@
       <geometry>
         <mesh filename="meshes/Pivot_Arm_Gripper_Idol.obj" />
       </geometry>
-      <material name="orange">
-        <color rgba="1 0.5 0 1" />
+      <material name="black_override">
+        <color rgba="0.25 0.25 0.25 1" />
       </material>
     </visual>
     <collision>

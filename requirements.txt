@@ -7,3 +7,6 @@ scipy
 pyserial
 matplotlib
 filterpy
+pyQt5
+PyOpenGL
+pyqtgraph
