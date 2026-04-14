@@ -2,9 +2,16 @@
 
 ## Overview
 
+
 This project implements a real-time robotic arm/gripper simulation controlled by hand tracking input. The system maps human hand motion to a robot end-effector using inverse kinematics and visualizes the result in a 3D environment.
 
 The project is designed as both a simulation and a foundation for real hardware control via Arduino.
+
+The robot model used in this project is based on the ready-made Moveo arm/gripper URDF from:
+
+`https://github.com/jesseweisberg/moveo_ros`
+
+This repository is used as the base robot description for the simulation and can be further modified to match the project needs.
 
 ---
 
