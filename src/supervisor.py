@@ -1,6 +1,6 @@
 import time
 import numpy as np
-
+from live_debug_window import DebugWindow
 from drake_sim import DrakeArmController
 from kinect import KinectHandTracker
 from mapping import CoordinateMapper
@@ -46,7 +46,7 @@ class Supervisor:
             baudrate=config.get("arduino_baudrate", 115200),
             enabled=config.get("arduino_enabled", False),
         )
-
+        self.debug_window = DebugWindow(max_points=20) #how many points on screen before disappearing
 
 
         self.loop_dt = config.get("loop_dt", 0.03)
@@ -61,13 +61,14 @@ class Supervisor:
     def run(self) -> None:
         self.hand_tracker.start()
         self.arduino.connect()
-
+        self.debug_window.start()
         print("Supervisor started")
-
+        
         try:
             while True:
                 measurement = self.hand_tracker.get_hand_measurement()
-
+                
+            
                 if measurement is None:
                     self.controller.update_visualization(self.last_valid_q)
                     time.sleep(self.idle_sleep)
@@ -78,7 +79,7 @@ class Supervisor:
                 hand_confidence = measurement["hand_confidence"]
 
                 filtered_hand = self.hand_filter.update(raw_hand)
-
+                self.debug_window.update(raw_hand, filtered_hand)
                 if filtered_hand is None:
                     self.controller.update_visualization(self.last_valid_q)
                     time.sleep(self.idle_sleep)
@@ -130,3 +131,4 @@ class Supervisor:
     def shutdown(self) -> None:
         self.hand_tracker.stop()
         self.arduino.close()
+        self.debug_window.stop()
