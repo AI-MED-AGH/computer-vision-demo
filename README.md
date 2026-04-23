@@ -13,6 +13,10 @@ The robot model used in this project is based on the ready-made Moveo arm/grippe
 
 This repository is used as the base robot description for the simulation and can be further modified to match the project needs.
 
+## Visualization
+
+<img width="1514" height="704" alt="nowe" src="https://github.com/user-attachments/assets/91ab1ad5-ee80-4a41-a267-27e1341a9038" />
+
 ---
 
 ## Features
